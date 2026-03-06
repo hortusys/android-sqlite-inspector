@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
 import type { AdbConfig } from "./adb.js";
 import { listDatabases, pullDatabase, pushDatabase } from "./adb.js";
