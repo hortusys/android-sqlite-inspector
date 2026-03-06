@@ -1,8 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import * as z from "zod/v4";
 import type { AdbConfig } from "./adb.js";
-import { listDatabases, pullDatabase, pushDatabase } from "./adb.js";
+import { listDatabases, pullDatabase, pullDatabaseCached, pushDatabase, invalidateCache, friendlyError } from "./adb.js";
 import * as db from "./database.js";
+
+function errorResult(err: unknown) {
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text: friendlyError(err) }],
+  };
+}
 
 export function registerTools(server: McpServer, config: AdbConfig): void {
   // 1. list_databases
@@ -14,15 +21,19 @@ export function registerTools(server: McpServer, config: AdbConfig): void {
       inputSchema: z.object({}),
     },
     async () => {
-      const databases = await listDatabases(config);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({ databases }, null, 2),
-          },
-        ],
-      };
+      try {
+        const databases = await listDatabases(config);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ databases }, null, 2),
+            },
+          ],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
     }
   );
 
@@ -38,11 +49,15 @@ export function registerTools(server: McpServer, config: AdbConfig): void {
       }),
     },
     async ({ database }) => {
-      const dbPath = await pullDatabase(config, database);
-      const tables = db.listTables(dbPath);
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify({ tables }, null, 2) }],
-      };
+      try {
+        const dbPath = await pullDatabaseCached(config, database);
+        const tables = db.listTables(dbPath);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ tables }, null, 2) }],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
     }
   );
 
@@ -59,13 +74,17 @@ export function registerTools(server: McpServer, config: AdbConfig): void {
       }),
     },
     async ({ database, table }) => {
-      const dbPath = await pullDatabase(config, database);
-      const columns = db.describeTable(dbPath, table);
-      return {
-        content: [
-          { type: "text" as const, text: JSON.stringify({ table, columns }, null, 2) },
-        ],
-      };
+      try {
+        const dbPath = await pullDatabaseCached(config, database);
+        const columns = db.describeTable(dbPath, table);
+        return {
+          content: [
+            { type: "text" as const, text: JSON.stringify({ table, columns }, null, 2) },
+          ],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
     }
   );
 
@@ -82,11 +101,15 @@ export function registerTools(server: McpServer, config: AdbConfig): void {
       }),
     },
     async ({ database, sql }) => {
-      const dbPath = await pullDatabase(config, database);
-      const result = db.query(dbPath, sql);
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
-      };
+      try {
+        const dbPath = await pullDatabaseCached(config, database);
+        const result = db.query(dbPath, sql);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
     }
   );
 
@@ -103,24 +126,53 @@ export function registerTools(server: McpServer, config: AdbConfig): void {
       }),
     },
     async ({ database, sql }) => {
-      const dbPath = await pullDatabase(config, database);
-      const result = db.execute(dbPath, sql);
-      await pushDatabase(config, database, dbPath);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(
-              {
-                changes: result.changes,
-                lastInsertRowid: Number(result.lastInsertRowid),
-              },
-              null,
-              2
-            ),
-          },
-        ],
-      };
+      try {
+        const dbPath = await pullDatabase(config, database);
+        const result = db.execute(dbPath, sql);
+        await pushDatabase(config, database, dbPath);
+        invalidateCache(database);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  changes: result.changes,
+                  lastInsertRowid: Number(result.lastInsertRowid),
+                },
+                null,
+                2
+              ),
+            },
+          ],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
+    }
+  );
+
+  // 6. room_info
+  server.registerTool(
+    "room_info",
+    {
+      title: "Room Database Info",
+      description:
+        "Show Room database metadata: schema version, identity hash, and managed entities.",
+      inputSchema: z.object({
+        database: z.string().describe("Database filename (e.g. app.db)"),
+      }),
+    },
+    async ({ database }) => {
+      try {
+        const dbPath = await pullDatabaseCached(config, database);
+        const info = db.roomInfo(dbPath);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }],
+        };
+      } catch (err) {
+        return errorResult(err);
+      }
     }
   );
 }

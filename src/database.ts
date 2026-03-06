@@ -67,6 +67,53 @@ export function query(
   }
 }
 
+export interface RoomInfo {
+  version: number | null;
+  identityHash: string | null;
+  entities: string[];
+}
+
+const ROOM_INTERNAL_TABLES = new Set([
+  "room_master_table",
+  "android_metadata",
+  "room_table_modification_log",
+]);
+
+export function roomInfo(dbPath: string): RoomInfo {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    // Check if room_master_table exists
+    const hasRoom = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='room_master_table'")
+      .get();
+
+    if (!hasRoom) {
+      throw new Error("This database does not appear to be a Room database (no room_master_table found)");
+    }
+
+    const row = db
+      .prepare("SELECT id, identity_hash FROM room_master_table LIMIT 1")
+      .get() as { id: number; identity_hash: string } | undefined;
+
+    // Get user entities (exclude Room internals and sqlite internals)
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .all() as { name: string }[];
+
+    const entities = tables
+      .map((t) => t.name)
+      .filter((n) => !n.startsWith("sqlite_") && !n.startsWith("_") && !ROOM_INTERNAL_TABLES.has(n));
+
+    return {
+      version: row?.id ?? null,
+      identityHash: row?.identity_hash ?? null,
+      entities,
+    };
+  } finally {
+    db.close();
+  }
+}
+
 export function execute(
   dbPath: string,
   sql: string

@@ -4,9 +4,10 @@ import Database from "better-sqlite3";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { listTables, describeTable, query, execute } from "../src/database.js";
+import { listTables, describeTable, query, execute, roomInfo } from "../src/database.js";
 
 let dbPath: string;
+let roomDbPath: string;
 let tmpDir: string;
 
 before(() => {
@@ -33,6 +34,18 @@ before(() => {
     INSERT INTO posts (user_id, title, body) VALUES (1, 'Hello', 'First post');
   `);
   db.close();
+
+  // Create a Room-style database
+  roomDbPath = join(tmpDir, "room.db");
+  const roomDb = new Database(roomDbPath);
+  roomDb.exec(`
+    CREATE TABLE room_master_table (id INTEGER PRIMARY KEY, identity_hash TEXT);
+    INSERT INTO room_master_table (id, identity_hash) VALUES (7, 'abc123hash');
+    CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE departments (id INTEGER PRIMARY KEY, title TEXT);
+    CREATE TABLE android_metadata (locale TEXT);
+  `);
+  roomDb.close();
 });
 
 after(() => {
@@ -163,5 +176,24 @@ describe("execute", () => {
       "UPDATE users SET age = 99 WHERE name = 'Nobody'"
     );
     assert.strictEqual(result.changes, 0);
+  });
+});
+
+describe("roomInfo", () => {
+  it("returns version and identity hash from room_master_table", () => {
+    const info = roomInfo(roomDbPath);
+    assert.strictEqual(info.version, 7);
+    assert.strictEqual(info.identityHash, "abc123hash");
+  });
+
+  it("lists user entities excluding Room internals", () => {
+    const info = roomInfo(roomDbPath);
+    assert.deepStrictEqual(info.entities, ["departments", "employees"]);
+  });
+
+  it("throws for non-Room database", () => {
+    assert.throws(() => roomInfo(dbPath), {
+      message: /does not appear to be a Room database/,
+    });
   });
 });
