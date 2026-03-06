@@ -12,7 +12,7 @@ export interface AdbConfig {
   adbPath?: string;
 }
 
-function adbArgs(config: AdbConfig, ...args: string[]): string[] {
+export function adbArgs(config: AdbConfig, ...args: string[]): string[] {
   const result: string[] = [];
   if (config.device) {
     result.push("-s", config.device);
