@@ -137,6 +137,46 @@ export async function pushDatabase(
   await execFileAsync(adb(config), adbArgs(config, "shell", "rm", tmpRemote));
 }
 
+// --- Feature 10: Device listing ---
+export interface DeviceInfo {
+  serial: string;
+  state: string;
+}
+
+export function parseDeviceList(output: string): DeviceInfo[] {
+  return output
+    .split("\n")
+    .slice(1) // skip "List of devices attached" header
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [serial, state] = line.split("\t");
+      return { serial, state };
+    });
+}
+
+export async function listDevices(config: AdbConfig): Promise<DeviceInfo[]> {
+  const { stdout } = await execFileAsync(adb(config), ["devices"]);
+  return parseDeviceList(stdout);
+}
+
+// --- Feature 9: Package listing ---
+export function parsePackageList(output: string): string[] {
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("package:"))
+    .map((line) => line.replace("package:", ""));
+}
+
+export async function listPackages(config: AdbConfig): Promise<string[]> {
+  const { stdout } = await execFileAsync(
+    adb(config),
+    adbArgs(config, "shell", "pm", "list", "packages", "-3")
+  );
+  return parsePackageList(stdout);
+}
+
 // --- Error mapping ---
 const ERROR_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   { pattern: /no devices\/emulators found|device not found/i, message: "No Android device connected. Run `adb devices` to check." },
