@@ -2,19 +2,37 @@
   "name": "android-sqlite-inspector",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "description": "MCP server for inspecting and querying Android SQLite databases via ADB",
+  "main": "dist/index.js",
   "bin": {
     "android-sqlite-inspector": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "test": "node --import tsx --test tests/**/*.test.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "mcp",
+    "sqlite",
+    "android",
+    "adb",
+    "database",
+    "inspector",
+    "room",
+    "model-context-protocol"
+  ],
+  "author": "hortusys",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hortusys/android-sqlite-inspector.git"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "better-sqlite3": "^12.6.2",
